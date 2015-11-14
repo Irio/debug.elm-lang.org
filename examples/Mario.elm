@@ -3,7 +3,9 @@ import Graphics.Collage exposing (..)
 import Graphics.Element exposing (..)
 import Keyboard
 import Time exposing (..)
+import List
 import Window
+import Set
 
 
 -- MODEL
@@ -35,12 +37,12 @@ mario =
 
 -- UPDATE
 
-update : (Float, Keys) -> Model -> Model
-update (dt, keys) mario =
+update : (Float, Keys, Set.Set Keyboard.KeyCode) -> Model -> Model
+update (dt, keys, codes) mario =
   mario
     |> gravity dt
     |> jump keys
-    |> walk keys
+    |> walk codes keys
     |> physics dt
 
 
@@ -66,15 +68,19 @@ physics dt mario =
   }
 
 
-walk : Keys -> Model -> Model
-walk keys mario =
-  { mario |
-      vx <- toFloat keys.x,
-      dir <-
-        if  | keys.x < 0 -> Left
-            | keys.x > 0 -> Right
-            | otherwise  -> mario.dir
-  }
+walk : Set.Set Keyboard.KeyCode -> Keys -> Model -> Model
+walk codes keys mario =
+  let
+    isRunning codes = Set.toList codes |> List.member 16
+    speed = if isRunning codes then 4 else 2
+  in
+    { mario |
+        vx <- toFloat (keys.x * speed),
+        dir <-
+          if  | keys.x < 0 -> Left
+              | keys.x > 0 -> Right
+              | otherwise  -> mario.dir
+    }
 
 
 -- VIEW
@@ -98,9 +104,9 @@ view (w',h') mario =
       "../resources/imgs/mario/" ++ verb ++ "/" ++ dir ++ ".gif"
 
     marioImage =
-      image 35 35 src
+      image 70 70 src
 
-    groundY = 62 - h/2
+    groundY = 70 - h/2
 
     position =
       (mario.x, mario.y + groundY)
@@ -121,12 +127,12 @@ view (w',h') mario =
 
 main : Signal Element
 main =
-  Signal.map2 view Window.dimensions (Signal.foldp update mario input)
+  Signal.map2 view Window.dimensions <| Signal.foldp update mario input
 
 
-input : Signal (Float, Keys)
+input : Signal (Float, Keys, Set.Set Keyboard.KeyCode)
 input =
   let
-    delta = Signal.map (\t -> t/20) (fps 30)
+    delta = Signal.map (\t -> t/10) (fps 30)
   in
-    Signal.sampleOn delta (Signal.map2 (,) delta Keyboard.arrows)
+    Signal.sampleOn delta (Signal.map3 (,,) delta Keyboard.arrows Keyboard.keysDown)
