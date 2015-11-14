@@ -19,6 +19,13 @@ type alias Model =
   }
 
 
+type alias Input =
+  ( Float
+  , Keys
+  , Set.Set Keyboard.KeyCode
+  )
+
+
 type Direction = Left | Right
 
 
@@ -37,7 +44,7 @@ mario =
 
 -- UPDATE
 
-update : (Float, Keys, Set.Set Keyboard.KeyCode) -> Model -> Model
+update : Input -> Model -> Model
 update (dt, keys, codes) mario =
   mario
     |> gravity dt
@@ -130,7 +137,7 @@ main =
   Signal.map2 view Window.dimensions <| Signal.foldp update mario input
 
 
-input : Signal (Float, Keys, Set.Set Keyboard.KeyCode)
+input : Signal Input
 input =
   let
     delta = Signal.map (\t -> t/10) (fps 30)
