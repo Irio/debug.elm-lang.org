@@ -7,3 +7,5 @@ resources/docs.json
 resources/_reactor
 log
 elm_dependencies
+elm-stuff
+elm.js
