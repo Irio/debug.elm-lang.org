@@ -20,12 +20,14 @@ type alias Model =
   , holes : List(Hole)
   }
 
+type alias Window = (Int, Int)
+
 
 type alias Input =
   ( Float
   , Keys
   , Set.Set Keyboard.KeyCode
-  , (Int, Int)
+  , Window
   )
 
 
@@ -62,7 +64,7 @@ update (dt, keys, codes, dimensions) mario =
     |> gravity dt
     |> jump keys
     |> walk codes keys
-    |> physics dt
+    |> physics dt dimensions
 
 
 isInGivenHole : Model -> Hole -> Bool
@@ -89,7 +91,7 @@ isDead model =
   model.y == yLowerLimit model && isFallingInHole model
 
 
-initializeGame : (Int, Int) -> Model -> Model
+initializeGame : Window -> Model -> Model
 initializeGame dimensions model =
   let
     w = toFloat (fst dimensions)
@@ -121,9 +123,10 @@ jump keys mario =
 
 
 yLowerLimit : Model -> Float
-yLowerLimit model = if isFallingInHole model
-           then -100.0
-           else 0.0
+yLowerLimit model =
+  if isFallingInHole model
+    then -100.0
+    else 0.0
 
 
 gravity : Float -> Model -> Model
@@ -133,10 +136,30 @@ gravity dt mario =
                     else yLowerLimit mario }
 
 
-physics : Float -> Model -> Model
-physics dt mario =
-  { mario | x <- mario.x + dt * mario.vx
-          , y <- max (yLowerLimit mario) (mario.y + dt * mario.vy)
+isCollidingWithWindow: Window -> Model -> Bool
+isCollidingWithWindow (windowX, windowY) model =
+  let
+    marioWidthInProperDirection = case model.dir of
+      Left -> abs (-18 + model.x)
+      Right -> abs (16 + model.x)
+  in
+    marioWidthInProperDirection >= ((toFloat windowX) / 2)
+
+
+isColliding: Window -> Model -> Bool
+isColliding dimensions model =
+  isCollidingWithWindow dimensions model
+
+
+
+physics : Float -> Window -> Model -> Model
+physics dt dimensions mario =
+  { mario | x <-
+              if isColliding dimensions mario
+                then mario.x
+                else mario.x + dt * mario.vx
+          , y <-
+              max (yLowerLimit mario) (mario.y + dt * mario.vy)
   }
 
 
@@ -157,7 +180,7 @@ walk codes keys mario =
 
 -- VIEW
 
-view : (Int, Int) -> Model -> Element
+view : Window -> Model -> Element
 view (w', h') model =
   let
     (w,h) = (toFloat w', toFloat h')
@@ -201,7 +224,7 @@ view (w', h') model =
              |> toForm
              |> move position )
   in
-    collage w' h' (List.reverse (mario :: forms))
+    List.reverse (mario :: forms) |> collage w' h'
 
 
 -- SIGNALS
