@@ -73,11 +73,10 @@ isInGivenHole model hole =
   in
     fst holeXRange < model.x - 32 / 2
       && model.x + 32 / 2 < snd holeXRange
-      && model.y == 0
 
 
-isInHole : Model -> Bool
-isInHole model =
+isFallingInHole : Model -> Bool
+isFallingInHole model =
   let
     checkHole = (\hole isInOtherHole ->
       isInOtherHole || isInGivenHole model hole)
@@ -87,7 +86,7 @@ isInHole model =
 
 isDead : Model -> Bool
 isDead model =
-  isInHole model
+  model.y == yLowerLimit model && isFallingInHole model
 
 
 initializeGame : (Int, Int) -> Model -> Model
@@ -116,22 +115,28 @@ initializeGame dimensions model =
 
 jump : Keys -> Model -> Model
 jump keys mario =
-  if keys.y > 0 && mario.vy == 0
+  if keys.y > round(yLowerLimit mario) && mario.vy == 0
     then { mario | vy <- 6.0 }
     else mario
 
 
+yLowerLimit : Model -> Float
+yLowerLimit model = if isFallingInHole model
+           then -100.0
+           else 0.0
+
+
 gravity : Float -> Model -> Model
 gravity dt mario =
-  { mario | vy <- if mario.y > 0
+  { mario | vy <- if mario.y > yLowerLimit mario
                     then mario.vy - dt/4
-                    else 0 }
+                    else yLowerLimit mario }
 
 
 physics : Float -> Model -> Model
 physics dt mario =
   { mario | x <- mario.x + dt * mario.vx
-          , y <- max 0 (mario.y + dt * mario.vy)
+          , y <- max (yLowerLimit mario) (mario.y + dt * mario.vy)
   }
 
 
