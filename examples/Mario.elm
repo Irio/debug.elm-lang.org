@@ -16,6 +16,8 @@ type alias Model =
   , vx : Float
   , vy : Float
   , dir : Direction
+  , game : GameState
+  , holes : List(Hole)
   }
 
 
@@ -23,10 +25,17 @@ type alias Input =
   ( Float
   , Keys
   , Set.Set Keyboard.KeyCode
+  , (Int, Int)
   )
 
 
+type alias Hole = (Float, Float)
+
+
 type Direction = Left | Right
+
+
+type GameState = Start | Live | Dead
 
 
 type alias Keys = { x:Int, y:Int }
@@ -39,18 +48,70 @@ mario =
   , vx = 0
   , vy = 0
   , dir = Right
+  , game = Start
+  , holes = []
   }
 
 
 -- UPDATE
 
 update : Input -> Model -> Model
-update (dt, keys, codes) mario =
+update (dt, keys, codes, dimensions) mario =
   mario
+    |> initializeGame dimensions
     |> gravity dt
     |> jump keys
     |> walk codes keys
     |> physics dt
+
+
+isInGivenHole : Model -> Hole -> Bool
+isInGivenHole model hole =
+  let
+    holeX = fst hole
+    holeXRange = (holeX - 130 / 2, holeX + 130 / 2)
+  in
+    fst holeXRange < model.x - 32 / 2
+      && model.x + 32 / 2 < snd holeXRange
+      && model.y == 0
+
+
+isInHole : Model -> Bool
+isInHole model =
+  let
+    checkHole = (\hole isInOtherHole ->
+      isInOtherHole || isInGivenHole model hole)
+  in
+    List.foldr checkHole False model.holes
+
+
+isDead : Model -> Bool
+isDead model =
+  isInHole model
+
+
+initializeGame : (Int, Int) -> Model -> Model
+initializeGame dimensions model =
+  let
+    w = toFloat (fst dimensions)
+    h = toFloat (snd dimensions)
+  in
+    case model.game of
+      Start ->
+        { mario | x     <- w / -2 + 100
+                , y     <- h
+                , vx    <- 0
+                , vy    <- 0
+                , game  <- Live
+                , holes <- [ (w / -3, 24 - h/2)
+                           , (w / 10, 24 - h/2) ]
+        }
+      Live ->
+        if isDead model
+          then { model | game <- Dead }
+          else model
+      Dead ->
+        { model | game <- Start }
 
 
 jump : Keys -> Model -> Model
@@ -62,16 +123,15 @@ jump keys mario =
 
 gravity : Float -> Model -> Model
 gravity dt mario =
-  { mario |
-      vy <- if mario.y > 0 then mario.vy - dt/4 else 0
-  }
+  { mario | vy <- if mario.y > 0
+                    then mario.vy - dt/4
+                    else 0 }
 
 
 physics : Float -> Model -> Model
 physics dt mario =
-  { mario |
-      x <- mario.x + dt * mario.vx,
-      y <- max 0 (mario.y + dt * mario.vy)
+  { mario | x <- mario.x + dt * mario.vx
+          , y <- max 0 (mario.y + dt * mario.vy)
   }
 
 
@@ -79,31 +139,31 @@ walk : Set.Set Keyboard.KeyCode -> Keys -> Model -> Model
 walk codes keys mario =
   let
     isRunning codes = Set.toList codes |> List.member 16
-    speed = if isRunning codes then 4 else 2
+    speed = if isRunning codes
+              then 4
+              else 2
   in
-    { mario |
-        vx <- toFloat (keys.x * speed),
-        dir <-
-          if  | keys.x < 0 -> Left
-              | keys.x > 0 -> Right
-              | otherwise  -> mario.dir
+    { mario | vx  <- toFloat (keys.x * speed)
+            , dir <- if | keys.x < 0 -> Left
+                        | keys.x > 0 -> Right
+                        | otherwise  -> mario.dir
     }
 
 
 -- VIEW
 
 view : (Int, Int) -> Model -> Element
-view (w',h') mario =
+view (w', h') model =
   let
     (w,h) = (toFloat w', toFloat h')
 
     verb =
-      if  | mario.y  >  0 -> "jump"
-          | mario.vx /= 0 -> "walk"
-          | otherwise     -> "stand"
+      if | model.y  >  0 -> "jump"
+         | model.vx /= 0 -> "walk"
+         | otherwise     -> "stand"
 
     dir =
-      case mario.dir of
+      case model.dir of
         Left -> "left"
         Right -> "right"
 
@@ -116,18 +176,27 @@ view (w',h') mario =
     groundY = 70 - h/2
 
     position =
-      (mario.x, mario.y + groundY)
+      (model.x, model.y + groundY)
+
+    drawHole = ( \hole -> (rect 130 50
+                           |> filled (rgb 174 238 238)
+                           |> move hole) )
+
+    holes = List.map drawHole model.holes
+
+    scenario = [ rect w 50
+                 |> filled (rgb 74 167 43)
+                 |> move (0, 24 - h/2)
+               , rect w h
+                 |> filled (rgb 174 238 238) ]
+
+    forms = List.append holes scenario
+
+    mario = (marioImage
+             |> toForm
+             |> move position )
   in
-    collage w' h'
-      [ rect w h
-          |> filled (rgb 174 238 238)
-      , rect w 50
-          |> filled (rgb 74 167 43)
-          |> move (0, 24 - h/2)
-      , marioImage
-          |> toForm
-          |> move position
-      ]
+    collage w' h' (List.reverse (mario :: forms))
 
 
 -- SIGNALS
@@ -142,4 +211,4 @@ input =
   let
     delta = Signal.map (\t -> t/10) (fps 30)
   in
-    Signal.sampleOn delta (Signal.map3 (,,) delta Keyboard.arrows Keyboard.keysDown)
+    Signal.sampleOn delta (Signal.map4 (,,,) delta Keyboard.arrows Keyboard.keysDown Window.dimensions)
